@@ -13,13 +13,17 @@
 
 SDL_Window* displayWindow;
 bool gameIsRunning = true;
+bool roundStart = false;
 float lastFrameTix = 0.0f;
 
 ShaderProgram program;
 
 glm::mat4 viewMatrix, p1Matrix, p2Matrix, ballMatrix, projectionMatrix;
 
-float p1Y, p2Y, ballX, ballY, deltaP1, deltaP2;
+float deltaTime, p1Y, p2Y,
+    ballX, ballY,
+    deltaP1, deltaP2,
+    ballAngle, ballDirX, ballDirY;
 
 void Initialize() {
     SDL_Init(SDL_INIT_VIDEO);
@@ -40,21 +44,22 @@ void Initialize() {
     p1Matrix = glm::mat4(1.0f);
     p2Matrix = glm::mat4(1.0f);
     ballMatrix = glm::mat4(1.0f);
-//
-    p1Y = p2Y = ballX = ballY = 0.0f;
-//
+
+    p1Y = p2Y = ballX = ballY = ballDirX = ballDirY = 0.0f;
+    ballAngle = 45.0f;
+
     projectionMatrix = glm::ortho(-5.0f, 5.0f, -3.75f, 3.75f, -1.0f, 1.0f);
     program.SetProjectionMatrix(projectionMatrix);
     program.SetViewMatrix(viewMatrix);
-//
+
     glUseProgram(program.programID);
-//
+
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
 }
 
 void ProcessInput() {
     float ticks = (float) SDL_GetTicks() / 1000.0f;
-    float deltaTime = ticks - lastFrameTix;
+    deltaTime = ticks - lastFrameTix;
     lastFrameTix = ticks;
 
     SDL_Event event;
@@ -68,19 +73,26 @@ void ProcessInput() {
                 deltaP1 = deltaP2 = 0.0f;
                 break;
             case SDL_KEYDOWN:
-                switch (event.key.keysym.sym) {
-                    case SDLK_UP:
-                        deltaP1 = 5.0 * deltaTime;
-                        break;
-                    case SDLK_DOWN:
-                        deltaP1 = -5.0 * deltaTime;
-                        break;
-                    case SDLK_w:
-                        deltaP2 = 5.0 * deltaTime;
-                        break;
-                    case SDLK_s:
-                        deltaP2 = -5.0 * deltaTime;
-                        break;
+                if (roundStart) {
+                    switch (event.key.keysym.sym) {
+                        case SDLK_UP:
+                            deltaP1 = 5.0 * deltaTime;
+                            break;
+                        case SDLK_DOWN:
+                            deltaP1 = -5.0 * deltaTime;
+                            break;
+                        case SDLK_w:
+                            deltaP2 = 5.0 * deltaTime;
+                            break;
+                        case SDLK_s:
+                            deltaP2 = -5.0 * deltaTime;
+                            break;
+                    }
+                } else if (event.key.keysym.sym == SDLK_SPACE) {
+                    roundStart = true;
+                    ballDirX = cosf(ballAngle * 3.14159 / 180);
+                    ballDirY = sinf(ballAngle * 3.14159 / 180);
+                    break;
                 }
                 break;
         }
@@ -92,7 +104,7 @@ void Render() {
     
     program.SetColor(1.0f, 1.0f, 1.0f, 1.0f);
 
-//     draw paddle1
+    // draw paddle1
     p1Matrix = glm::mat4(1.0f);
     p1Matrix = glm::translate(p1Matrix, glm::vec3(0.0f, p1Y, 0.0f));
     program.SetModelMatrix(p1Matrix);
@@ -126,11 +138,31 @@ void Render() {
     glEnableVertexAttribArray(program.positionAttribute);
 
     glDrawArrays(GL_TRIANGLES, 0, 6);
-//
+
     glDisableVertexAttribArray(program.positionAttribute);
-//
+
     SDL_GL_SwapWindow(displayWindow);
     
+}
+
+bool collidedWithPaddle(int p, float objectY, float bx, float by) {
+    float objectX = 4.4f; //default for p = 1
+    float ballWidth = 0.1f;
+    float paddleWidth = 0.025f;
+    float paddleHeight = 1.0f;
+
+    if (p == 2) {
+        objectX = -4.4f;
+    }
+    
+    float distanceX = fabs(bx - objectX) - (paddleWidth + ballWidth) / 2;
+    float distanceY = fabs(by - objectY) - (paddleHeight + ballWidth) / 2;
+
+    return (distanceX < 0 && distanceY < 0);
+}
+
+bool ballHitCeilOrFloor(float by) {
+    return (by + .05 >= 3.0f) || (by - .05 <= -3.0f);
 }
 
 void Update() {
@@ -140,7 +172,7 @@ void Update() {
 
     // update p1
     float p1NextY = p1Y + deltaP1;
-    if (p1NextY >= 3.0f || p1NextY <= -3.0f) {
+    if (p1NextY + 0.5f >= 3.0f || p1NextY - 0.5f <= -3.0f) {
         deltaP1 = 0.0f;
     } else {
         p1Y = p1NextY;
@@ -148,15 +180,39 @@ void Update() {
 
     // update p2
     float p2NextY = p2Y + deltaP2;
-    if (p2NextY >= 3.0f || p2NextY <= -3.0f) {
+    if (p2NextY + 0.5f >= 3.0f || p2NextY - 0.5f <= -3.0f) {
         deltaP2 = 0.0f;
     } else {
         p2Y = p2NextY;
     }
     
     // update ball
+    ballX += ballDirX * deltaTime * 2.0f;
+    ballY += ballDirY * deltaTime * 2.0f;
     
-    
+    if (ballHitCeilOrFloor(ballY)) {
+        ballAngle *= -1;
+        ballDirX = cosf(ballAngle * 3.14159 / 180);
+        ballDirY = sinf(ballAngle * 3.14159 / 180);
+    } else if (collidedWithPaddle(1, p1Y, ballX, ballY)) {
+        float reflectAngle = (ballAngle < 0) ? -90.0f : 90.0f;
+        ballAngle += reflectAngle;
+        ballDirX = cosf(ballAngle * 3.14159 / 180);
+        ballDirY = sinf(ballAngle * 3.14159 / 180);
+    } else if (collidedWithPaddle(2, p2Y, ballX, ballY)) {
+        float reflectAngle = (ballAngle > 0) ? 90.0f : -90.0f;
+        ballAngle += reflectAngle;
+        ballDirX = cosf(ballAngle * 3.14159 / 180);
+        ballDirY = sinf(ballAngle * 3.14159 / 180);
+    } else if (ballX + .05 >= 5.0f || ballX - .05 <= -5.0f) {
+        // somebody scored
+        
+        ballMatrix = glm::mat4(1.0f);
+        ballX = ballY = ballDirX = ballDirY = 0.0f;
+        ballAngle = 45.0f;
+        roundStart = false;
+        
+    }
 }
 
 void Shutdown() {

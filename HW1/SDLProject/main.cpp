@@ -128,11 +128,11 @@ void Update() {
     float deltaTime = ticks - lastFrameTix;
     lastFrameTix = ticks;
     
-    luigi_x = 1.0f * deltaTime;
-    mario_rotate = 180.0f * deltaTime;
+    luigi_x = 0.5f * deltaTime;
+    mario_rotate = 45.0f * deltaTime;
     
     modelMatrix_luigi = glm::translate(modelMatrix_luigi, glm::vec3(luigi_x, 0.0f, 0.0f));
-    modelMatrix_mario = glm::rotate(modelMatrix_mario, glm::radians(mario_rotate), glm::vec3(0.0f, 0.0f, 1.0f));
+    modelMatrix_mario = glm::rotate(modelMatrix_mario, glm::radians(mario_rotate), glm::vec3(0.0f, 1.0f, 1.0f));
 }
 
 void Shutdown() {

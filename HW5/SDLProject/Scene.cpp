@@ -6,4 +6,4 @@
 //  Copyright © 2020 ctg. All rights reserved.
 //
 
-#include <stdio.h>
+#include "Scene.h"
